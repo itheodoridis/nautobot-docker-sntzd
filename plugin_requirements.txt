@@ -1,0 +1,6 @@
+nautobot-device-onboarding==3.0.1
+nautobot-device-lifecycle-mgmt==2.1.0
+nautobot-bgp-models==2.0.0
+nautobot-plugin-nornir==2.0.1
+nautobot-golden-config==2.0.3
+nautobot-floor-plan==2.0.0

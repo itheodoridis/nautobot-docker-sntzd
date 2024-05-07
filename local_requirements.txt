@@ -1,0 +1,11 @@
+netmiko
+nornir
+nornir-utils
+nornir-netmiko
+nornir-nautobot
+nornir_pyxl
+nornir_netconf
+xmltodict
+ipdb
+requests
+nornir-inspect

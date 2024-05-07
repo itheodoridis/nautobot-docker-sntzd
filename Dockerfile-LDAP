@@ -1,0 +1,43 @@
+ARG PYTHON_VER=3.11
+ARG NAUTOBOT_VERSION=2.1.8
+
+FROM networktocode/nautobot:${NAUTOBOT_VERSION}-py${PYTHON_VER} as base
+
+USER 0
+RUN apt-get update -y && apt-get install -y libldap2-dev libsasl2-dev libssl-dev ca-certificates
+
+# ---------------------------------
+# Stage: Builder
+# ---------------------------------
+FROM base as builder
+
+RUN apt-get install -y gcc && \
+    apt-get autoremove -y && \
+    apt-get clean all && \
+    rm -rf /var/lib/apt/lists/*
+
+#RUN pip3 install --upgrade pip wheel && pip3 install django-auth-ldap netmiko nornir nornir-utils nornir-netmiko nornir-nautobot nornir_pyxl nornir_netconf
+RUN pip3 install --upgrade pip wheel && pip3 install django-auth-ldap
+
+# ---------------------------------
+# Stage: Final
+# ---------------------------------
+FROM base as final
+ARG PYTHON_VER
+USER 0
+
+COPY --from=builder /usr/local/lib/python${PYTHON_VER}/site-packages /usr/local/lib/python${PYTHON_VER}/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --chown=nautobot:nautobot ./nautobot_config.py /opt/nautobot/nautobot_config.py
+
+COPY ./ssl/ca/root.crt /usr/local/share/ca-certificates/
+COPY ./ssl/ca/interm.crt /usr/local/share/ca-certificates/
+RUN update-ca-certificates
+
+USER nautobot
+WORKDIR /opt/nautobot
+
+COPY --chown=nautobot:nautobot ./local_requirements.txt /opt/nautobot/
+RUN pip install --no-warn-script-location -r /opt/nautobot/local_requirements.txt
+COPY --chown=nautobot:nautobot ./plugin_requirements.txt /opt/nautobot/
+RUN pip install --no-warn-script-location -r /opt/nautobot/plugin_requirements.txt

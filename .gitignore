@@ -1,0 +1,6 @@
+*.xlsx
+*credentials*
+venv/
+__pycache__/
+.git-credentials
+.vscode/

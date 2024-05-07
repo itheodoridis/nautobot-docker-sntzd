@@ -1,0 +1,107 @@
+---
+version: "3.8"
+services:
+  nautobot:
+    image: "noc/nautobot-ldap:latest"
+    build:
+      args:
+        PYTHON_VER: "${PYTHON_VER:-3.11}"
+      context: "./"
+      dockerfile: "Dockerfile-LDAP"
+      target: "final"
+    env_file:
+      - "./local.env"
+    restart: "unless-stopped"
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - "./nautobot_config.py:/opt/nautobot/nautobot_config.py"
+    depends_on:
+      - "postgres"
+      - "redis"
+  celery_worker:
+    build:
+      args:
+        PYTHON_VER: "${PYTHON_VER:-3.11}"
+      context: "./"
+      dockerfile: "Dockerfile-LDAP"
+      target: "final"
+    image: "noc/nautobot-ldap:latest"
+    #entrypoint: "nautobot-server celery worker -l $$NAUTOBOT_LOG_LEVEL"
+    entrypoint: "sh -c 'nautobot-server celery worker -l $$NAUTOBOT_LOG_LEVEL'"
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - "./nautobot_config.py:/opt/nautobot/nautobot_config.py"
+    healthcheck:
+      interval: "30s"
+      timeout: "10s"
+      start_period: "30s"
+      retries: 3
+      test: ["CMD", "bash", "-c", "nautobot-server celery inspect ping --destination celery@$$HOSTNAME"]  ## $$ because of docker-compose
+    depends_on:
+      - "nautobot"
+      - "redis"
+    env_file:
+      - "./local.env"
+    tty: true
+  celery_beat:
+    build:
+      args:
+        PYTHON_VER: "${PYTHON_VER:-3.11}"
+      context: "./"
+      dockerfile: "Dockerfile-LDAP"
+      target: "final"
+    entrypoint: "sh -c 'nautobot-server celery beat -l $$NAUTOBOT_LOG_LEVEL'"
+    image: "noc/nautobot-ldap:latest"
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - "./nautobot_config.py:/opt/nautobot/nautobot_config.py"
+    healthcheck:
+      interval: "5s"
+      timeout: "5s"
+      start_period: "5s"
+      retries: 3
+      test: ["CMD", "nautobot-server", "health_check"]
+    depends_on:
+      - "nautobot"
+      - "redis"
+    env_file:
+      - "./local.env"
+    tty: true
+  redis:
+    image: "redis:alpine"
+    env_file:
+      - "./local.env"
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro           
+    command:
+      - "sh"
+      - "-c"  # this is to evaluate the $REDIS_PASSWORD from the env
+      - "redis-server --appendonly yes --requirepass $$NAUTOBOT_REDIS_PASSWORD"  ## $$ because of docker-compose
+    restart: "unless-stopped"
+  postgres:
+    image: "postgres:14"
+    env_file:
+      - "./local.env"
+    volumes:
+      - "postgres_data:/var/lib/postgresql/data"
+    #  - /etc/timezone:/etc/timezone:ro
+    #  - /etc/localtime:/etc/localtime:ro
+    restart: "unless-stopped"
+  nginx:
+    image: nginx:1.21.1-alpine
+    depends_on:
+      - "nautobot"
+    ports:
+      - "443:443"
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro    
+      - ./nginx-default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssl/servername.cer:/etc/ssl/certs/nginx.crt:ro # you actually need to create these certs
+      - ./ssl/servername.nopasswd.key.pem:/etc/ssl/private/nginx.key.pem:ro # you actually need to create these certs
+volumes:
+  postgres_data:
